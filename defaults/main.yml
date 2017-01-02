@@ -1,0 +1,11 @@
+---
+# The newrelic license key must be set for the service to start
+newrelic_sysmond_license_key:
+
+newrelic_sysmond_hostname: "{{ inventory_hostname }}"
+
+# Labels applied to data sent from this agent. Example Lable:Value;Label2:Value2
+newrelic_sysmond_labels: ""
+
+newrelic_sysmond_loglevel: "info"
+newrelic_sysmond_logfile: "/var/log/newrelic/nrsysmond.log"

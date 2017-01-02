@@ -1,0 +1,19 @@
+---
+- name: fail without newrelic license
+  fail: msg="newrelic_sysmond_license_key key is not set"
+  when: newrelic_sysmond_license_key is none
+
+- name: setup newrelic yum repo
+  yum:
+    name: https://yum.newrelic.com/pub/newrelic/el5/x86_64/newrelic-repo-5-3.noarch.rpm
+    state: present
+
+- name: install newrelic-sysmond
+  yum: name=newrelic-sysmond state=present
+
+- name: configure newrelic-sysmond
+  template: src=nrsysmond.cfg.j2 dest=/etc/newrelic/nrsysmond.cfg owner=root group=root mode=0644
+  notify: restart newrelic-sysmond
+
+- name: start newrelic-sysmond service
+  service: name=newrelic-sysmond state=started enabled=yes
