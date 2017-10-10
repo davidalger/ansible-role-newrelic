@@ -3,6 +3,7 @@
   fail: msg="newrelic_sysmond_license_key key is not set"
   when: newrelic_sysmond_license_key is none
 
+# https://docs.newrelic.com/docs/agents/php-agent/getting-started/introduction-new-relic-php#installation
 - name: setup newrelic yum repo
   yum:
     name: https://yum.newrelic.com/pub/newrelic/el5/x86_64/newrelic-repo-5-3.noarch.rpm
@@ -17,3 +18,25 @@
 
 - name: start newrelic-sysmond service
   service: name=newrelic-sysmond state=started enabled=yes
+
+- name: fail without newrelic apm license
+  fail: msg="newrelic_apm_key key is not set"
+  when: newrelic_apm_key is none
+
+- name: install newrelic-php5
+  yum: name=newrelic-php5 state=present
+
+- name: configure newrelic-php5
+  template: src=newrelic.ini.j2 dest=/etc/php.d/newrelic.ini owner=root group=root mode=0644
+  notify:
+    - restart newrelic-daemon
+    - restart php-fpm
+
+- name: configure newrelic-php5
+  template: src=newrelic.cfg.j2 dest=/etc/newrelic/newrelic.cfg owner=root group=root mode=0644
+  notify:
+    - restart newrelic-daemon
+    - restart php-fpm
+
+- name: start newrelic-daemon service
+  service: name=newrelic-daemon state=started enabled=yes
