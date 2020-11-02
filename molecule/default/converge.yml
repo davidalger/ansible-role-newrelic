@@ -10,5 +10,11 @@
           - php-cli
         state: present
 
+    - name: Workaround socket ACL read failure on local CI environments
+      lineinfile:
+        path: /etc/php-fpm.d/www.conf
+        regexp: '^listen ='
+        line: 'listen = 127.0.0.1:9000'
+
   roles:
     - role: davidalger.newrelic
