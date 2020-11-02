@@ -34,6 +34,19 @@
 # https://docs.newrelic.com/docs/agents/php-agent/getting-started/introduction-new-relic-php#installation
 - name: Install NewRelic APM Agent
   block:
+    - name: Install NewRelic RPM GPG Key
+      copy:
+        src: RPM-GPG-KEY-NewRelic
+        dest: /etc/pki/rpm-gpg/RPM-GPG-KEY-NewRelic
+        owner: root
+        group: root
+        mode: 0644
+
+    - name: Import NewRelic RPM GPG Key
+      rpm_key:
+        key: /etc/pki/rpm-gpg/RPM-GPG-KEY-NewRelic
+        state: present
+
     - name: Install NewRelic APM repository
       package:
         name: https://yum.newrelic.com/pub/newrelic/el5/x86_64/newrelic-repo-5-3.noarch.rpm
