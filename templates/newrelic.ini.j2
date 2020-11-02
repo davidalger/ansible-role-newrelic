@@ -1,3 +1,8 @@
+;
+; Copyright 2020 New Relic Corporation. All rights reserved.
+; SPDX-License-Identifier: Apache-2.0
+;
+
 ; This file contains the various settings for the New Relic PHP agent. There
 ; are many options, all of which are described in detail at the following URL:
 ; https://docs.newrelic.com/docs/agents/php-agent/configuration/php-agent-configuration
@@ -74,10 +79,6 @@ newrelic.logfile = "/var/log/newrelic/php_agent.log"
 ; Default: false
 ; Info   : Enables high security for all applications. When high security is
 ;          enabled, the following behavior will take effect:
-;          * Data will not be sent to New Relic unless the newrelic-daemon
-;            is using SSL. If the PHP process spawns a newrelic-daemon, it
-;            will be configured to use SSL regardless of the value of
-;            ```newrelic.daemon.ssl```.
 ;          * Raw SQL strings will never be gathered, regardless of the value of
 ;            newrelic.transaction_tracer.record_sql.
 ;          * Request parameters will never be captured, regardless of the
@@ -91,6 +92,10 @@ newrelic.logfile = "/var/log/newrelic/php_agent.log"
 ;          IMPORTANT:  If you change this setting, you must also change the RPM
 ;          UI security setting. If the two settings do not match, then no data
 ;          will be collected.
+;
+;          IMPORTANT: This setting is not compatible with
+;          newrelic.security_policies_token. Only one may be set. If both are
+;          set an error will be thrown and the agent will not connect.
 ;
 ;newrelic.high_security = false
 
@@ -161,31 +166,35 @@ newrelic.daemon.logfile = "/var/log/newrelic/newrelic-daemon.log"
 ;
 ;newrelic.daemon.loglevel = "info"
 
-; Setting: newrelic.daemon.port
+; Setting: newrelic.daemon.address (alias: newrelic.daemon.port)
 ; Type   : string or integer
 ; Scope  : system
-; Default: /tmp/.newrelic.sock
+; Default: "@newrelic" on Linux, "/tmp/.newrelic.sock" otherwise
 ; Info   : Sets how the agent and daemon communicate. How this is set can impact
-;          performance. The default is to use a UNIX-domain socket located at
-;          /tmp/.newrelic.sock. If you want to use UNIX domain sockets then
-;          this value must begin with a "/". If you set this to an integer
-;          value in the range 1-65534, then this will instruct the agent to use
-;          a normal TCP socket on the port specified. This may be easier to use
-;          if you are using a chroot environment. On Linux, an abstract socket
-;          can be created by prefixing the socket name with '@'. Support for
-;          abstract sockets was added in PHP agent version 5.2.
+;          performance.
 ;
-;newrelic.daemon.port = "/tmp/.newrelic.sock"
-newrelic.daemon.port = "@newrelic-daemon"
-
-; Setting: newrelic.daemon.ssl
-; Type   : boolean
-; Scope  : system
-; Default: true (as of version 3.6)
-; Info   : Sets whether or not communication with New Relic data collectors
-;          should use a secure HTTP connection or not.
+;          On Linux, the default is to use the abstract socket "@newrelic". An
+;          abstract socket can be created by prefixing the socket name with '@'.
 ;
-;newrelic.daemon.ssl = true
+;          On MacOS and FreeBSD, the default is to use a UNIX-domain socket
+;          located at "/tmp/.newrelic.sock". If you want to use UNIX domain
+;          sockets then this value must begin with a '/'. 
+;
+;          If you set this to an integer value in the range 1-65535, then this
+;          will instruct the agent to use a normal TCP socket on the port 
+;          specified. This may be easier to use if you are using a chroot 
+;          environment.
+;
+;          To connect to a daemon that is running on a different host, set this
+;          value to '<host>:<port>', where '<host>' denotes either a host name
+;          or an IP address and '<port>' denotes a valid port number. IPv6 is
+;          supported.
+;
+;          In order to use a TCP socket with a port in the range 1-1023,
+;          the daemon must be started by the super-user. This is a fundamental
+;          OS limitation and not one imposed by the daemon itself.
+;
+;newrelic.daemon.address = "/tmp/.newrelic.sock"
 
 ; Setting: newrelic.daemon.ssl_ca_bundle
 ; Type   : string
@@ -197,8 +206,7 @@ newrelic.daemon.port = "@newrelic-daemon"
 ;          newrelic.daemon.ssl_ca_path is also set (see below), the
 ;          certificates in this file will be searched first, followed by the
 ;          certificates contained in the newrelic.daemon.ssl_ca_path
-;          directory. This setting has no effect when newrelic.daemon.ssl is
-;          set to false.
+;          directory.
 ;
 ;newrelic.daemon.ssl_ca_bundle = ""
 
@@ -211,8 +219,7 @@ newrelic.daemon.port = "@newrelic-daemon"
 ;          used to authenticate the New Relic collector servers. If
 ;          newrelic.daemon.ssl_ca_bundle is also set (see above), it will be
 ;          searched first followed by the certificates contained in
-;          newrelic.daemon.ssl_ca_path. This setting has no effect when
-;          newrelic.daemon.ssl is set to false.
+;          newrelic.daemon.ssl_ca_path.
 ;
 ;newrelic.daemon.ssl_ca_path = ""
 
@@ -257,7 +264,7 @@ newrelic.daemon.port = "@newrelic-daemon"
 ; Setting: newrelic.daemon.collector_host
 ; Type   : string
 ; Scope  : system
-; Default: collector.newrelic.com
+; Default: none
 ; Info   : Sets the host name of the New Relic data collector host to use.
 ;          Please note that this is NOT any form of local host. It refers to
 ;          the New Relic provided host. There is very little reason to ever
@@ -265,7 +272,7 @@ newrelic.daemon.port = "@newrelic-daemon"
 ;          circumstances, and then only on instruction from a New Relic sales
 ;          person or support staff member.
 ;
-;newrelic.daemon.collector_host = "collector.newrelic.com"
+;newrelic.daemon.collector_host = ""
 
 ; Setting: newrelic.daemon.dont_launch
 ; Type   : integer (0, 1, 2 or 3)
@@ -337,7 +344,57 @@ newrelic.daemon.port = "@newrelic-daemon"
 ;          limit of 250 applications. Allowed units are "ns", "us", "ms", "s",
 ;          "m", and "h".
 ;
+;          A value of 0 is interpreted as "no timeout". New applications with
+;          this setting count toward the 250 application limit. In addition, with
+;          a 0-value setting, the agent's daemon process cannot release a small
+;          amount of memory per application back to the operating system.
+;
+;          We do not recommend using a 0-value setting except under the guidance
+;          of technical support; instead, for occasional background transactions,
+;          we suggest using a value of twice the interval (so, for an hourly
+;          background job, set the timeout to 2 hours).
+
 ;newrelic.daemon.app_timeout = 10m
+
+; Setting: newrelic.daemon.app_connect_timeout
+; Type   : time specification string ("1s", "5m", etc)
+; Scope  : system
+; Default: 0
+; Info   : Sets the maximum time the agent should wait for the daemon 
+;          connecting an application.  A value of 0 causes the agent to only
+;          make one attempt at connecting to the daemon.  Allowed units are 
+;          "ns", "us", "ms", "s", "m", and "h".
+;
+;          With this timeout set, the agent will not immediately drop a
+;          transaction when the daemon hasn't connected to the backend yet, but
+;          rather grant the daemon time to establish the connection.
+;
+;          If setting a timeout, the recommended value is 10s.  It is
+;          recommended to only set this timeout when instrumenting long-lived
+;          background tasks, as in case of connection problems the agent will
+;          block for the given timeout at every transaction start.
+;
+;newrelic.daemon.app_connect_timeout = 0
+
+; Setting: newrelic.daemon.start_timeout
+; Type   : time specification string ("1s", "5m", etc)
+; Scope  : system
+; Default: 0
+; Info   : Sets the maximum time the agent should wait for the daemon 
+;          to start after a daemon launch was triggered.  A value of 0 causes
+;          the agent to not wait.  Allowed units are "ns", "us", "ms", "s", "m"
+;          and "h".
+;
+;          The specified timeout value will be passed to the daemon via the
+;          --wait-for-port flag.  This causes daemon startup to block until a
+;          socket is acquired or until the timeout has elapsed.
+;
+;          If setting a timeout, the recommended value is 2s to 5s.  It is
+;          recommended to only set this timeout when instrumenting long-lived
+;          background tasks, as in case of daemon start problems the agent will
+;          block for the given timeout at every transaction start.
+;
+;newrelic.daemon.start_timeout = 0
 
 ; Setting: newrelic.error_collector.enabled
 ; Type   : boolean
@@ -382,15 +439,28 @@ newrelic.daemon.port = "@newrelic-daemon"
 ;newrelic.error_collector.ignore_exceptions = ""
 
 ; Setting: newrelic.error_collector.ignore_errors
-; Type:    string
+; Type:    int or a bitwise expression of PHP-defined error constants
 ; Scope:   per-directory
 ; Default: none
 ; Info:    Sets the error levels that the agent should ignore.
 ;
+;          The value for this setting uses similar syntax to the error syntax
+;          for the PHP error reporting.  For example, to configure the PHP Agent
+;          to ignore E_WARNING and E_ERROR level errors, use:
+;
+;          newrelic.error_collector.ignore_errors = E_WARNING | E_ERROR
+;
+;          or
+;
+;          newrelic.error_collector.ignore_errors = 3
+;
+;          The list of constants are available at:
+;          http://php.net/manual/en/errorfunc.constants.php
+;
 ;          Please note that this setting does not apply to errors recorded
 ;          using the newrelic_notice_error API.
 ;
-;newrelic.error_collector.ignore_errors = ""
+;newrelic.error_collector.ignore_errors = 0
 
 ; Setting: newrelic.error_collector.record_database_errors
 ; Type   : boolean
@@ -530,13 +600,32 @@ newrelic.daemon.port = "@newrelic-daemon"
 ;
 ;newrelic.transaction_tracer.custom = ""
 
+; Setting: newrelic.transaction_tracer.internal_functions_enabled
+; Type   : boolean
+; Scope  : system
+; Default: false
+; Info   : Enables or disables support for tracing internal functions (that is,
+;          functions written in C and provided either via the PHP standard
+;          library or PECL extensions). When enabled, internal functions will
+;          appear in transaction traces like functions written in PHP.
+;
+;          Note that enabling this option may result in transactions being up to
+;          5% slower. Enabling this option is only recommended when specifically
+;          debugging performance issues where an internal function is suspected
+;          to be slow.
+;
+;newrelic.transaction_tracer.internal_functions_enabled = false
+
 ; Setting: newrelic.framework
 ; Type   : string
 ; Scope  : per-directory
 ; Default: empty (auto-detect framework)
-; Info   : Forces the framework to be one of the supported frameworks. Since
-;          this should only be used if the auto-detection fails, please let
-;          us know at support.newrelic.com if you encounter a failure.
+; Info   : Disables automatic framework detection, telling the agent to
+;          attempt to name transactions according to the specified framework.
+;          Specifying "no_framework" will disable framework-related transaction
+;          naming entirely. Please let us know at support.newrelic.com if you
+;          encounter a failure with framework autodetection.
+;
 ;          Must be one of the following values:
 ;          cakephp, codeigniter, drupal, drupal8, joomla, kohana, laravel,
 ;          magento, magento2, mediawiki, silex, slim, symfony1, symfony2,
@@ -625,6 +714,7 @@ newrelic.daemon.port = "@newrelic-daemon"
 ;          newrelic.transaction_tracer.attributes.enabled
 ;          newrelic.error_collector.attributes.enabled
 ;          newrelic.browser_monitoring.attributes.enabled
+;          newrelic.span_events.attributes.enabled
 ; Type   : boolean
 ; Scope  : per-directory
 ; Default: true, except for browser_monitoring.attributes.enabled
@@ -643,6 +733,7 @@ newrelic.daemon.port = "@newrelic-daemon"
 ;newrelic.transaction_tracer.attributes.enabled = true
 ;newrelic.error_collector.attributes.enabled = true
 ;newrelic.browser_monitoring.attributes.enabled = false
+;newrelic.span_events.attributes.enabled = true
 
 ; Setting: newrelic.attributes.include
 ;          newrelic.attributes.exclude
@@ -658,6 +749,9 @@ newrelic.daemon.port = "@newrelic-daemon"
 ;
 ;          newrelic.browser_monitoring.attributes.include
 ;          newrelic.browser_monitoring.attributes.exclude
+;
+;          newrelic.span_events.attributes.include
+;          newrelic.span_events.attributes.exclude
 ;
 ; Type   : string
 ; Scope  : per-directory
@@ -707,6 +801,9 @@ newrelic.daemon.port = "@newrelic-daemon"
 ;
 ;newrelic.browser_monitoring.attributes.include = ""
 ;newrelic.browser_monitoring.attributes.exclude = ""
+;
+;newrelic.span_events.attributes.include = ""
+;newrelic.span_events.attributes.exclude = ""
 
 ; Setting: newrelic.feature_flag
 ; Type   : string
@@ -763,6 +860,79 @@ newrelic.daemon.port = "@newrelic-daemon"
 ; Info   : Enables or disables support for Cross Application Tracing, aka "CAT".
 ;
 ;newrelic.cross_application_tracer.enabled = true
+
+; Setting: newrelic.distributed_tracing_enabled
+; Type   : boolean
+; Scope  : per-directory
+; Default: false
+; Info   : Distributed tracing lets you see the path that a request takes
+;          through your distributed system. Enabling distributed tracing changes
+;          the behavior of some New Relic features, so carefully consult the
+;          transition guide before you enable this feature:
+;          https://docs.newrelic.com/docs/transition-guide-distributed-tracing
+;
+;newrelic.distributed_tracing_enabled = false
+
+; Setting: newrelic.distributed_tracing_exclude_newrelic_header
+; Type   : boolean
+; Scope  : per-directory
+; Default: false
+; Info   : Set this to true to exclude the New Relic distributed tracing header
+;          that is attached to outbound requests, and to instead only rely on
+;          W3C Trace Context Headers for distributed tracing. If this is false
+;          then both types of headers are attached to outbound requests.
+;
+;          The New Relic distributed tracing header allows interoperability
+;          with older agents that do not support W3C Trace Context headers.
+;          Agent versions that support W3C Trace Context headers will
+;          prioritize them over New Relic headers for distributed tracing.    
+;
+;newrelic.distributed_tracing_exclude_newrelic_header = false
+
+; Setting: newrelic.span_events_enabled
+; Type   : boolean
+; Scope  : per-directory
+; Default: true
+; Info   : Enables or disables the creation of span events. This requires
+;          Distributed Tracing to be enabled.
+;
+;newrelic.span_events_enabled = true
+
+; Setting: newrelic.infinite_tracing.trace_observer.host
+; Type   : string
+; Scope  : per-directory
+; Default:
+; Info   : Configures the Trace Observer used for Infinite Tracing. If empty,
+;          Infinite Tracing support will be disabled. This requires Distributed
+;          Tracing and span events to be enabled.
+;
+;newrelic.infinite_tracing.trace_observer.host=
+
+; Setting: newrelic.infinite_tracing.trace_observer.port
+; Type   : integer
+; Scope  : per-directory
+; Default: 443
+; Info   : Configures the port used to communicate with the Infinite Tracing
+;          Trace Observer. This setting is ignored if
+;          newrelic.infinite_tracing.trace_observer.host is empty. This setting
+;          will not usually need to be changed.
+;
+;newrelic.infinite_tracing.trace_observer.port=443
+
+; Setting: newrelic.infinite_tracing.span_events.queue_size
+; Type   : integer (1000 or higher)
+; Scope  : per-directory
+; Default: 100000
+; Info   : Sets the number of span events that can be queued for transmission
+;          to the Infinite Tracing Trace Observer.
+;
+;          The agent internally manages span events for Infinite Tracing in
+;          span batches. Those span batches can hold a maximum of 1000 spans.
+;          Therefore, the span events queue size cannot be lower than 1000, as
+;          otherwise not even a single span batch can be queued. If a queue
+;          size lower than 1000 is specified, the mininum size of 1000 is used.
+;
+;newrelic.infinite_tracing.span_events.queue_size=100000
 
 ; Setting: newrelic.transaction_tracer.gather_input_queries
 ; Type   : boolean
@@ -825,3 +995,130 @@ newrelic.daemon.port = "@newrelic-daemon"
 ;          SQL traces.
 ;
 ;newrelic.datastore_tracer.database_name_reporting.enabled = true
+
+; Setting: newrelic.security_policies_token
+; Type   : string
+; Scope  : per-directory
+; Default: none
+; Info   : Enables or disables security policies. If security policies are
+;          enabled on your account, you should paste the security policies token
+;          from the New Relic APM UI here.
+;
+;          IMPORTANT: This setting is not compatible with newrelic.high_security.
+;          Only one may be set. If both are set an error will be thrown and the
+;          agent will not connect.
+;
+;newrelic.security_policies_token = ""
+
+; Setting: newrelic.preload_framework_library_detection
+; Type   : boolean
+; Scope  : system
+; Default: true
+; Info   : Enables detection of frameworks and libraries from opcache.
+;
+;          This only happens when preloading is enabled (when `opcache.preload`
+;          is set).
+;
+;newrelic.preload_framework_library_detection = true
+
+; setting: newrelic.transaction_tracer.max_segments_web
+; type   : integer in the range 0 - 2^31-1
+; scope  : per-directory
+; default: 0
+; info   : Specifies the maximum number of segments the PHP agent shall
+;          record, once that maximum is reached sampling will occur.
+;
+;          The PHP agent reports transaction traces and distributed traces as a
+;          collection of segments.
+;          Each segment represents a method or a function call in a transaction
+;          trace. The default value for this configuration is 0, indicating that
+;          the PHP agent shall capture all segments during a transaction. At the
+;          end of a transaction, it assembles the highest priority segments to
+;          report in a transaction trace.
+;
+;          For long-running PHP processes with hundreds of thousands or millions
+;          of function calls, setting this to a value greater than 1 prevents the
+;          PHP agent from exhausting system memory when recording segments.
+;
+;          Segment size can vary based upon the length of the corresponding
+;          method's name, the length of its class name, and the number of
+;          subsequent calls made by the method. That said, a conservative estimate
+;          is 400 bytes per segment. To limit the PHP agent to 40 mb for segment
+;          capture, set this value to 100000.  If this value is set lower than
+;          2000, it further limits the total number of segments reported for
+;          transaction traces.
+;
+;          This configuration setting is only for PHP web processes; it will not
+;          effect PHP CLI processes. To set a limit for CLI processes use
+;          newrelic.transaction_tracer.max_segments_cli.
+;newrelic.transaction_tracer.max_segments_web = 0
+
+; setting: newrelic.transaction_tracer.max_segments_cli
+; type   : integer in the range 0 - 2^31-1
+; scope  : per-directory
+; default: 100000
+; info   : Specifies the maximum number of segments the PHP agent shall
+;          record, once that maximum is reached sampling will occur.
+;
+;          The PHP agent reports a transaction trace as a collection of segments.
+;          each segment represents a method or a function call in a transaction
+;          trace. The default value for this configuration is 100000. When a value
+;          of less than 1 is set, it will indicate that the PHP agent shall capture
+;          all segments during a transaction. At the end of a transaction, the agent
+;          assembles the highest priority segments to report in a transaction trace.
+;
+;          For long-running PHP processes with hundreds of thousands or millions
+;          of function calls, setting this to a value greater than 1 prevents the
+;          PHP agent from exhausting system memory when recording segments.
+;
+;          Segment size can vary based upon the length of the corresponding
+;          method's name, the length of its class name, and the number of
+;          subsequent calls made by the method. That said, a conservative estimate
+;          is 400 bytes per segment. To limit the PHP agent to 40 mb for segment
+;          capture, set this value to 100000. If this value is set lower than 2000,
+;          it further limits the total number of segments reported for transaction
+;          traces.
+;
+;          This configuration setting is only for PHP CLI processes; it will not
+;          effect PHP web processes. To set a limit for web processes use
+;          newrelic.transaction_tracer.max_segments_web.
+;newrelic.transaction_tracer.max_segments_cli = 100000
+
+; Setting: newrelic.capture_params
+; Info   : This setting has been deprecated.
+;          It was formerly used to capture request parameters.
+;          It has been replaced by the attribute configuration settings.
+;          To replicate this setting with the new settings, one would use:
+;
+;          newrelic.transaction_tracer.attributes.include = request.parameters.*
+;          newrelic.error_collector.attributes.include = request.parameters.*
+;
+;          Please refer to the attribute configuration options for more
+;          information.
+
+; Setting: newrelic.ignored_params
+; Info   : This setting has been deprecated.
+;          It was formerly used to filter request parameters.
+;          It has been replaced by the attribute configuration settings.
+;          If you would like to exclude the request parameter 'alpha', use:
+;
+;          newrelic.attributes.exclude = request.parameters.alpha
+;
+;          Please refer to the attribute configuration options for more
+;          information.
+
+; Setting: newrelic.framework.drupal.modules
+; Type   : boolean
+; Scope  : per-directory
+; Default: true
+; Info   : Indicates if Drupal modules, hooks and views are to be instrumented.
+;
+;newrelic.framework.drupal.modules = true
+
+; Setting: newrelic.framework.wordpress.hooks
+; Type   : boolean
+; Scope  : per-directory
+; Default: true
+; Info   : Indicates if WordPress hooks are to be instrumented.
+;
+;newrelic.framework.wordpress.hooks = true
