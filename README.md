@@ -20,8 +20,7 @@ None.
 
     - hosts: web-servers
       vars:
-        newrelic_apm_key: YOUR_APM_KEY_HERE
-        newrelic_sysmond_license_key: YOUR_LICENSE_KEY_HERE
+        newrelic_license: YOUR_NR_LICENSE_KEY_HERE
 
       roles:
         - { role: davidalger.newrelic, tags: newrelic }

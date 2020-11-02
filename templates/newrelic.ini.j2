@@ -51,7 +51,7 @@ extension = "newrelic.so"
 ;          eliminate the potential for confusion about exactly where the key
 ;          is coming from.
 ;
-newrelic.license = "{{ newrelic_apm_key }}"
+newrelic.license = "{{ newrelic_apm_license }}"
 
 ; Setting: newrelic.logfile
 ; Type   : string
@@ -109,7 +109,7 @@ newrelic.logfile = "/var/log/newrelic/php_agent.log"
 ;          list is considered the 'primary' application name and must be unique
 ;          for each account / license key.
 ;
-newrelic.appname = "{{ newrelic_apm_default_appname }}"
+newrelic.appname = "{{ newrelic_apm_appname }}"
 
 ; Setting: newrelic.process_host.display_name
 ; Type   : string
