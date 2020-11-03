@@ -14,7 +14,7 @@ See `defaults/main.yml` for details.
 
 ## Dependencies
 
-None.
+* `davidalger.selinux`
 
 ## Example Playbook
 

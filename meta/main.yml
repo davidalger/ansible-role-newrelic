@@ -1,5 +1,6 @@
 ---
-dependencies: []
+dependencies:
+  - {role: davidalger.selinux, when: use_davidalger_selinux | default(true)}
 
 galaxy_info:
   role_name: newrelic

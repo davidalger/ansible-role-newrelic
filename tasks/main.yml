@@ -1,4 +1,19 @@
 ---
+# Assumes SELinux python tools pre-installed; these will be installed by the davidalger.selinux role
+- name: Configure SELinux so newrelic-daemon (APM Agent) will transition into httpd_t context on startup
+  sefcontext:
+    target: "{{ item.target }}"
+    setype: "{{ item.setype }}"
+    ftype: "{{ item.ftype | default('a') }}"
+    selevel: "{{ item.selevel | default(omit) }}"
+    seuser: "{{ item.seuser | default(omit) }}"
+    state: "{{ item.state | default('present') }}"
+  with_items:
+    - target: /usr/bin/newrelic-daemon
+      setype: httpd_exec_t
+      state: present
+  when: ('status' in ansible_selinux) and (ansible_selinux.status != 'disabled')
+
 # https://docs.newrelic.com/docs/infrastructure/install-infrastructure-agent/linux-installation/
 - name: Install NewRelic Infrastructure Agent
   block:
